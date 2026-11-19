@@ -3,6 +3,15 @@ namespace ThroughputMonitor.Web.Data;
 /// <summary>One point of a throughput chart (rates in bytes per second).</summary>
 public readonly record struct ChartPoint(DateTime TimeUtc, double RxBps, double TxBps);
 
+/// <summary>The three lines of the hover tooltip for one chart point.</summary>
+public sealed record ChartTooltip(string Title, string Rx, string Tx)
+{
+    public static ChartTooltip For(ChartPoint p) => new(
+        Fmt.LocalTime(p.TimeUtc),
+        $"{Fmt.Mbps(p.RxBps)} · {Fmt.MBps(p.RxBps)}",
+        $"{Fmt.Mbps(p.TxBps)} · {Fmt.MBps(p.TxBps)}");
+}
+
 public static class ChartData
 {
     /// <summary>

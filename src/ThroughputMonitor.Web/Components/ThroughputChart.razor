@@ -34,9 +34,9 @@ else
 
         @foreach (var h in _hits)
         {
-            <rect class="hit" x="@F(h.X)" y="@Top" width="@F(h.Width)" height="@(H - Top - Bottom)">
-                <title>@h.Tooltip</title>
-            </rect>
+            @* Text for the hover tooltip is read by chart-tip.js; no native <title>, which the browser would draw itself. *@
+            <rect class="hit" x="@F(h.X)" y="@Top" width="@F(h.Width)" height="@(H - Top - Bottom)"
+                  data-tip-title="@h.Tip.Title" data-tip-rx="@h.Tip.Rx" data-tip-tx="@h.Tip.Tx" />
         }
     </svg>
 }
@@ -52,7 +52,7 @@ else
 
     private const double W = 900, H = 320, Left = 52, Right = 14, Top = 16, Bottom = 28;
 
-    private sealed record Hit(double X, double Width, string Tooltip);
+    private sealed record Hit(double X, double Width, ChartTooltip Tip);
 
     private List<(double Value, double Y)> _yTicks = [];
     private List<(string Label, double X)> _xTicks = [];
@@ -110,8 +110,7 @@ else
             double xl = i == 0 ? Left : (X(Points[i - 1].TimeUtc) + X(Points[i].TimeUtc)) / 2;
             double xr = i == Points.Count - 1 ? W - Right : (X(Points[i].TimeUtc) + X(Points[i + 1].TimeUtc)) / 2;
             var p = Points[i];
-            _hits.Add(new Hit(xl, Math.Max(xr - xl, 0.5),
-                $"{Fmt.LocalTime(p.TimeUtc)}   RX {Fmt.Mbps(p.RxBps)} ({Fmt.MBps(p.RxBps)})   TX {Fmt.Mbps(p.TxBps)}"));
+            _hits.Add(new Hit(xl, Math.Max(xr - xl, 0.5), ChartTooltip.For(p)));
         }
     }
 

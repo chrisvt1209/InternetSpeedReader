@@ -49,123 +49,125 @@ else
             <Window Title="note.txt"><span>@s.Note</span></Window>
         }
 
-        <div class="tiles">
-            <Window Title="avg_down.exe" Hot="true">
-                <div class="big">@Fmt.Mbps(s.AvgRxBps)</div>
-                <div class="cap">@Fmt.MBps(s.AvgRxBps)</div>
-            </Window>
-            <Window Title="peak_down.exe">
-                <div class="big">@Fmt.Mbps(s.PeakRxBps)</div>
-                <div class="cap">@Fmt.MBps(s.PeakRxBps) · @Fmt.Percent(s.PeakRxBps * 8 / 1e6 / refMbps) of @refMbps.ToString("N0") Mbps</div>
-            </Window>
-            <Window Title="downloaded.exe">
-                <div class="big">@Fmt.Bytes(s.TotalRxBytes)</div>
-                <div class="cap">@Fmt.Bytes(s.TotalTxBytes) sent</div>
-            </Window>
-            <Window Title="upload.exe">
-                <div class="big">@Fmt.Mbps(s.AvgTxBps)</div>
-                <div class="cap">avg · peak @Fmt.Mbps(s.PeakTxBps)</div>
-            </Window>
-            <Window Title="machine.exe">
-                <div class="big">@s.AvgCpuPercent.ToString("N0")% CPU</div>
-                <div class="cap">peak @s.PeakCpuPercent.ToString("N0")% · disk @Fmt.MBps(s.AvgDiskBytesPerSec) (peak @Fmt.MBps(s.PeakDiskBytesPerSec))</div>
-            </Window>
-            <Window Title="link.exe">
-                <div class="big">@Fmt.LinkSpeed(s.MinLinkSpeedBps)</div>
-                <div class="cap">lowest link speed during the session</div>
-            </Window>
-        </div>
+        @* Tiles and chart on the left; the remote servers run down the right side next to both. *@
+        <div class="detail-grid">
+            <div class="detail-main stack">
+                <div class="tiles">
+                    <Window Title="avg_down.exe" Hot="true">
+                        <div class="big">@Fmt.Mbps(s.AvgRxBps)</div>
+                        <div class="cap">@Fmt.MBps(s.AvgRxBps)</div>
+                    </Window>
+                    <Window Title="peak_down.exe">
+                        <div class="big">@Fmt.Mbps(s.PeakRxBps)</div>
+                        <div class="cap">@Fmt.MBps(s.PeakRxBps) · @Fmt.Percent(s.PeakRxBps * 8 / 1e6 / refMbps) of @refMbps.ToString("N0") Mbps</div>
+                    </Window>
+                    <Window Title="downloaded.exe">
+                        <div class="big">@Fmt.Bytes(s.TotalRxBytes)</div>
+                        <div class="cap">@Fmt.Bytes(s.TotalTxBytes) sent</div>
+                    </Window>
+                    <Window Title="upload.exe">
+                        <div class="big">@Fmt.Mbps(s.AvgTxBps)</div>
+                        <div class="cap">avg · peak @Fmt.Mbps(s.PeakTxBps)</div>
+                    </Window>
+                    <Window Title="machine.exe">
+                        <div class="big">@s.AvgCpuPercent.ToString("N0")% CPU</div>
+                        <div class="cap">peak @s.PeakCpuPercent.ToString("N0")% · disk @Fmt.MBps(s.AvgDiskBytesPerSec) (peak @Fmt.MBps(s.PeakDiskBytesPerSec))</div>
+                    </Window>
+                    <Window Title="link.exe">
+                        <div class="big">@Fmt.LinkSpeed(s.MinLinkSpeedBps)</div>
+                        <div class="cap">lowest link speed during the session</div>
+                    </Window>
+                </div>
 
-        <Window Title="throughput.chart">
-            <BarContent>
-                <label>
-                    <input type="checkbox" @bind="_scaleToLink" />scale to link
-                </label>
-            </BarContent>
-            <ChildContent>
-                <ThroughputChart Points="_detail.Points" ReferenceMbps="refMbps" ScaleToReference="_scaleToLink" />
-            </ChildContent>
-        </Window>
+                <Window Title="throughput.chart">
+                    <BarContent>
+                        <label>
+                            <input type="checkbox" @bind="_scaleToLink" />scale to link
+                        </label>
+                    </BarContent>
+                    <ChildContent>
+                        <ThroughputChart Points="_detail.Points" ReferenceMbps="refMbps" ScaleToReference="_scaleToLink" />
+                    </ChildContent>
+                </Window>
+            </div>
 
-        <div class="two-col">
-            <Window Title="programs.log" BodyClass="flush">
-                @if (_detail.Programs.Count == 0)
-                {
-                    <div class="tm-empty">
-                        @(running
-                            ? "Per-program totals are saved when the session ends."
-                            : "No per-program data for this session (the agent was probably not running as administrator).")
-                    </div>
-                }
-                else
-                {
-                    <div class="tm-table-wrap">
+            <div class="detail-side">
+                <Window Title="remotes.log" Class="fill" BodyClass="flush">
+                    @if (_detail.Remotes.Count == 0)
+                    {
+                        <div class="tm-empty">No remote address data for this session.</div>
+                    }
+                    else
+                    {
                         <table class="tm-table">
                             <thead>
                                 <tr>
-                                    <th>program</th>
-                                    <th class="num">down</th>
-                                    <th class="num">up</th>
-                                    <th class="num">peak rx</th>
-                                    <th>share</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var p in _detail.Programs)
-                                {
-                                    double share = programBytes == 0 ? 0 : (double)(p.RxBytes + p.TxBytes) / programBytes;
-                                    <tr>
-                                        <td title="@p.ExePath"><strong>@p.ProcessName</strong></td>
-                                        <td class="num">@Fmt.Bytes(p.RxBytes)</td>
-                                        <td class="num">@Fmt.Bytes(p.TxBytes)</td>
-                                        <td class="num">@Fmt.Mbps(p.PeakRxBps)</td>
-                                        <td>
-                                            <div class="share">
-                                                <div class="share-bar"><span style="width:@((share * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
-                                                <span class="share-pct">@Fmt.Percent(share)</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </Window>
-
-            <Window Title="remotes.log" BodyClass="flush">
-                @if (_detail.Remotes.Count == 0)
-                {
-                    <div class="tm-empty">No remote address data for this session.</div>
-                }
-                else
-                {
-                    <div class="tm-table-wrap">
-                        <table class="tm-table">
-                            <thead>
-                                <tr>
-                                    <th>program</th>
-                                    <th>remote address</th>
-                                    <th class="num">down</th>
-                                    <th class="num">up</th>
+                                    <th>remote address / program</th>
+                                    <th class="num">down / up</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach (var r in _detail.Remotes)
                                 {
                                     <tr>
-                                        <td><strong>@r.ProcessName</strong></td>
-                                        <td>@(r.RemoteHostName ?? r.RemoteIp)@if (r.RemoteHostName is not null) { <span class="cell-sub">@r.RemoteIp</span> }</td>
-                                        <td class="num">@Fmt.Bytes(r.RxBytes)</td>
-                                        <td class="num">@Fmt.Bytes(r.TxBytes)</td>
+                                        <td>
+                                            <strong>@(r.RemoteHostName ?? r.RemoteIp)</strong>
+                                            <span class="cell-sub">@(r.RemoteHostName is not null ? r.RemoteIp + " · " : "")@r.ProcessName</span>
+                                        </td>
+                                        <td class="num">@Fmt.Bytes(r.RxBytes)<span class="cell-sub">@Fmt.Bytes(r.TxBytes) up</span></td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
-                    </div>
-                }
-            </Window>
+                    }
+                </Window>
+            </div>
         </div>
+
+        <Window Title="programs.log" BodyClass="flush">
+            @if (_detail.Programs.Count == 0)
+            {
+                <div class="tm-empty">
+                    @(running
+                        ? "Per-program totals are saved when the session ends."
+                        : "No per-program data for this session (the agent was probably not running as administrator).")
+                </div>
+            }
+            else
+            {
+                <div class="tm-table-wrap">
+                    <table class="tm-table">
+                        <thead>
+                            <tr>
+                                <th>program</th>
+                                <th class="num">down</th>
+                                <th class="num">up</th>
+                                <th class="num">peak rx</th>
+                                <th>share</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in _detail.Programs)
+                            {
+                                double share = programBytes == 0 ? 0 : (double)(p.RxBytes + p.TxBytes) / programBytes;
+                                <tr>
+                                    <td title="@p.ExePath"><strong>@p.ProcessName</strong></td>
+                                    <td class="num">@Fmt.Bytes(p.RxBytes)</td>
+                                    <td class="num">@Fmt.Bytes(p.TxBytes)</td>
+                                    <td class="num">@Fmt.Mbps(p.PeakRxBps)</td>
+                                    <td>
+                                        <div class="share">
+                                            <div class="share-bar"><span style="width:@((share * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                            <span class="share-pct">@Fmt.Percent(share)</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </Window>
     </div>
 }
 

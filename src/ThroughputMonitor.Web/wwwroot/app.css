@@ -134,7 +134,7 @@ code { color: var(--tm-red); background: transparent; }
 .app-content {
     padding: 1.5rem 2rem 3rem 1.6rem;
     width: 100%;
-    max-width: 1500px;
+    min-width: 0;   /* uses the whole width next to the sidebar, however wide the screen */
 }
 
 .app-topbar, .app-backdrop { display: none; }
@@ -179,6 +179,21 @@ code { color: var(--tm-red); background: transparent; }
 
 .two-col { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.25rem 1.4rem; }
 
+/* Session page: tiles + chart on the left, the remote servers as a column beside both. */
+.detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 360px); gap: 1.4rem; align-items: stretch; }
+.detail-side { position: relative; min-height: 22rem; }
+/* The window takes exactly the height of the left column and scrolls inside, so a long list never stretches the page. */
+.detail-side > .win.fill { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.win.fill > .win-body { flex: 1; min-height: 0; overflow-y: auto; }
+.detail-main .tiles { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+/* Not enough room for a side column: the remote servers drop below the chart. */
+@media (max-width: 1100px) {
+    .detail-grid { grid-template-columns: minmax(0, 1fr); }
+    .detail-side { min-height: 0; }
+    .detail-side > .win.fill { position: static; max-height: 24rem; }
+}
+
 .tag {
     display: inline-block;
     padding: 0 0.4rem;
@@ -197,6 +212,68 @@ code { color: var(--tm-red); background: transparent; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 0.6rem 1.1rem; align-items: center; }
 .filter-row label { font-size: 0.72rem; color: var(--tm-mut); margin: 0 0.35rem 0 0; }
 .filter-row .field { display: flex; align-items: center; }
+
+/* ===== Date picker ===== */
+.dp { position: relative; display: inline-block; }
+.dp-field { display: flex; }
+.dp-input { width: 8.4rem; }
+.dp-open {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    border: 2px solid var(--tm-ink);
+    border-left: 0;
+    background: var(--tm-win);
+    color: var(--tm-ink);
+    cursor: pointer;
+}
+.dp-open svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: square; }
+.dp-open:hover, .dp-open[aria-expanded="true"] { background: var(--tm-ink); color: var(--tm-paper); }
+
+.dp-backdrop { position: fixed; inset: 0; z-index: 55; background: transparent; }
+
+.dp-pop {
+    position: absolute;
+    z-index: 60;
+    top: calc(100% + 0.6rem);
+    left: 0;
+    width: 17.5rem;
+}
+.dp-bar { padding: 0.15rem 0.3rem; }
+.dp-title { flex: 1; text-align: center; text-transform: lowercase; }
+.dp-nav { display: flex; gap: 0.15rem; }
+.dp-nav button {
+    width: 1.5rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.dp-nav button:hover { background: var(--tm-paper); color: var(--tm-ink); }
+
+.dp-body { padding: 0.6rem; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dp-head span { text-align: center; font-size: 0.65rem; color: var(--tm-mut); padding-bottom: 0.3rem; text-transform: lowercase; }
+
+.dp-day {
+    aspect-ratio: 1;
+    border: 2px solid transparent;
+    background: transparent;
+    color: var(--tm-ink);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 0;
+}
+.dp-day.other { color: var(--tm-mut); opacity: 0.55; }
+.dp-day:hover { border-color: var(--tm-ink); }
+.dp-day.today { border-color: var(--tm-red); font-weight: 700; }
+.dp-day.selected { background: var(--tm-ink); color: var(--tm-paper); border-color: var(--tm-ink); opacity: 1; }
+.dp-day.selected.today { border-color: var(--tm-red); }
+
+.dp-foot { display: flex; justify-content: space-between; margin-top: 0.6rem; }
 
 .form-control, .form-select {
     background-color: var(--tm-paper);
@@ -333,6 +410,27 @@ input[type="date"] { color-scheme: light; }
 .tm-chart .ref { stroke: var(--tm-ink); stroke-dasharray: 5 4; stroke-width: 1; }
 .tm-chart .hit { fill: transparent; }
 .tm-chart .hit:hover { fill: color-mix(in srgb, var(--tm-ink) 10%, transparent); }
+
+/* Hover tooltip: a tiny window (see chart-tip.js) */
+.chart-tip {
+    position: fixed;
+    z-index: 200;
+    min-width: 12rem;
+    pointer-events: none;
+    border: 3px solid var(--tm-ink);
+    background: var(--tm-win);
+    box-shadow: 4px 4px 0 var(--tm-sh);
+    color: var(--tm-ink);
+    font-family: var(--tm-mono);
+    font-size: 0.74rem;
+}
+.chart-tip[hidden] { display: none; }
+.chart-tip-bar { background: var(--tm-ink); color: var(--tm-paper); padding: 0.1rem 0.5rem; font-weight: 700; }
+.chart-tip-row { display: flex; justify-content: space-between; gap: 1.2rem; padding: 0.2rem 0.5rem; }
+.chart-tip-row + .chart-tip-row { border-top: 2px dashed var(--tm-ink); }
+.chart-tip-row b { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chart-tip-row i { display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.4rem; background: var(--tm-ink); }
+.chart-tip-row i.tx { background: var(--tm-red); }
 
 .tm-legend { display: flex; flex-wrap: wrap; gap: 1.1rem; font-size: 0.72rem; margin-bottom: 0.35rem; }
 .tm-legend i { display: inline-block; width: 1rem; height: 0.28rem; margin-right: 0.4rem; vertical-align: middle; }

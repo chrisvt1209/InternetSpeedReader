@@ -43,11 +43,11 @@ else
             <div class="filter-row">
                 <div class="field">
                     <label for="from">from</label>
-                    <input id="from" type="date" class="form-control form-control-sm" @bind="_from" @bind:after="ApplyFiltersAsync" />
+                    <DatePicker Id="from" AriaLabel="From date" @bind-Value="_from" @bind-Value:after="ApplyFiltersAsync" />
                 </div>
                 <div class="field">
                     <label for="to">to</label>
-                    <input id="to" type="date" class="form-control form-control-sm" @bind="_to" @bind:after="ApplyFiltersAsync" />
+                    <DatePicker Id="to" AriaLabel="To date" @bind-Value="_to" @bind-Value:after="ApplyFiltersAsync" />
                 </div>
                 <div class="field" style="flex:1; min-width:200px">
                     <label for="search" class="visually-hidden">search</label>

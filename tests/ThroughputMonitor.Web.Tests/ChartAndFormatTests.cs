@@ -32,6 +32,18 @@ public class ChartAndFormatTests
     }
 
     [Fact]
+    public void Tooltip_shows_the_local_time_and_both_directions_in_two_units()
+    {
+        var point = new ChartPoint(new DateTime(2026, 1, 1, 12, 30, 15, DateTimeKind.Utc), 78_400_000, 500_000);
+
+        var tip = ChartTooltip.For(point);
+
+        Assert.Equal(Fmt.LocalTime(point.TimeUtc), tip.Title);
+        Assert.Equal("627 Mbps · 78.4 MB/s", tip.Rx);
+        Assert.Equal("4.0 Mbps · 0.5 MB/s", tip.Tx);
+    }
+
+    [Fact]
     public void Value_series_is_reduced_keeping_each_bucket_peak()
     {
         var values = Enumerable.Range(0, 500).Select(i => i == 250 ? 99.0 : 1.0).ToList();
