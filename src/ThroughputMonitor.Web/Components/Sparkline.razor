@@ -1,0 +1,39 @@
+@* Tiny shape of a session's download speed. The red dot marks the peak. *@
+@if (_points.Length > 0)
+{
+    <svg class="spark" viewBox="0 0 84 20" preserveAspectRatio="none" role="img" aria-label="Shape of the session's download speed">
+        <polyline points="@_points" />
+        <circle cx="@_peakX" cy="@_peakY" r="3" />
+    </svg>
+}
+
+@code {
+    /// <summary>Values (any unit), oldest first.</summary>
+    [Parameter] public IReadOnlyList<double>? Values { get; set; }
+
+    private string _points = "";
+    private string _peakX = "0", _peakY = "0";
+
+    protected override void OnParametersSet()
+    {
+        _points = "";
+        if (Values is not { Count: >= 2 }) return;
+
+        double max = Values.Max();
+        if (max <= 0) return;
+
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+        int n = Values.Count, peakAt = 0;
+        var parts = new string[n];
+        for (int i = 0; i < n; i++)
+        {
+            double x = 2 + 80.0 * i / (n - 1);
+            double y = 18 - 16.0 * Values[i] / max;
+            parts[i] = $"{x.ToString("0.#", ci)},{y.ToString("0.#", ci)}";
+            if (Values[i] > Values[peakAt]) peakAt = i;
+        }
+        _points = string.Join(' ', parts);
+        _peakX = (2 + 80.0 * peakAt / (n - 1)).ToString("0.#", ci);
+        _peakY = (18 - 16.0 * Values[peakAt] / max).ToString("0.#", ci);
+    }
+}

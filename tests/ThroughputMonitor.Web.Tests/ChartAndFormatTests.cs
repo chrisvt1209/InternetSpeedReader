@@ -31,6 +31,18 @@ public class ChartAndFormatTests
         Assert.True(reduced.SequenceEqual(reduced.OrderBy(p => p.TimeUtc)), "time order must be kept");
     }
 
+    [Fact]
+    public void Value_series_is_reduced_keeping_each_bucket_peak()
+    {
+        var values = Enumerable.Range(0, 500).Select(i => i == 250 ? 99.0 : 1.0).ToList();
+
+        var reduced = ChartData.DownsampleMax(values, 28);
+
+        Assert.InRange(reduced.Count, 25, 28);
+        Assert.Equal(99.0, reduced.Max());
+        Assert.Same(values, ChartData.DownsampleMax(values, 1000));      // short series untouched
+    }
+
     [Theory]
     [InlineData(0, 1, 1)]
     [InlineData(0.7, 0.2, 0.8)]

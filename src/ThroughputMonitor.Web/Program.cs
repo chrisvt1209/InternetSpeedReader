@@ -5,6 +5,11 @@ using ThroughputMonitor.Web.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Local use only: unless a launch profile, --urls or ASPNETCORE_URLS says otherwise, listen on localhost.
+// (Not in appsettings.json: a "Urls" value there would override the https launch profile.)
+if (string.IsNullOrWhiteSpace(builder.Configuration["urls"]))
+    builder.WebHost.UseUrls("http://localhost:5294");
+
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 

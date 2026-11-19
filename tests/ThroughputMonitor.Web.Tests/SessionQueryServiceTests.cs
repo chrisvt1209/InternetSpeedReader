@@ -163,6 +163,47 @@ public sealed class SessionQueryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Rows_carry_a_downsampled_sparkline_that_keeps_the_peak()
+    {
+        long id;
+        using (var ctx = _factory.CreateDbContext())
+        {
+            id = ctx.Sessions.Single(s => s.Label == "Backup").Id;
+            var t0 = LocalNoon(3, 11);
+            for (int i = 0; i < 400; i++)
+                ctx.Samples.Add(new Sample { AdapterId = 1, SessionId = id, TimestampUtc = t0.AddSeconds(i), IntervalMs = 1000, RxBytesPerSec = i == 123 ? 8 * MB : 1 * MB });
+            ctx.SaveChanges();
+        }
+
+        var result = await _service.QueryAsync(new SessionQuery());
+
+        var backup = result.Items.Single(r => r.Label == "Backup");
+        Assert.NotNull(backup.Spark);
+        Assert.InRange(backup.Spark!.Count, 20, SessionQueryService.SparkPoints);
+        Assert.Equal(8 * MB, backup.Spark.Max());
+        Assert.Null(result.Items.Single(r => r.Label == "Steam download").Spark);       // no samples stored for it
+    }
+
+    [Fact]
+    public async Task Summary_counts_sessions_and_finds_the_peak_and_todays_traffic()
+    {
+        using (var ctx = _factory.CreateDbContext())
+        {
+            var now = DateTime.UtcNow;
+            ctx.Sessions.Add(new Session { AdapterId = 1, StartUtc = now.AddMinutes(-1), EndUtc = null, PeakRxBps = 50 * MB, TotalRxBytes = 7_000, TotalTxBytes = 300 });
+            ctx.SaveChanges();
+        }
+
+        var summary = await _service.GetSummaryAsync();
+
+        Assert.Equal(4, summary.TotalSessions);
+        Assert.Equal(1, summary.RunningSessions);
+        Assert.Equal(117 * MB, summary.PeakRxBps);                       // best peak among all sessions
+        Assert.Equal(7_000, summary.TodayRxBytes);                       // only the session started today
+        Assert.Equal(300, summary.TodayTxBytes);
+    }
+
+    [Fact]
     public async Task Unknown_session_gives_null()
     {
         Assert.Null(await _service.GetDetailAsync(9999));

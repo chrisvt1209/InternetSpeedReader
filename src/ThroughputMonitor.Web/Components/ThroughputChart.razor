@@ -9,11 +9,11 @@
 else
 {
     <div class="tm-legend">
-        <span><i class="rx"></i>Download (RX)</span>
-        <span><i class="tx"></i>Upload (TX)</span>
+        <span><i class="rx"></i>download (rx)</span>
+        <span><i class="tx"></i>upload (tx)</span>
         @if (_showRef)
         {
-            <span><i style="background:var(--tm-ref)"></i>Link capacity (@ReferenceMbps.ToString("N0") Mbps)</span>
+            <span><i style="background:none;height:0;border-top:2px dashed var(--tm-ink)"></i>link capacity (@ReferenceMbps.ToString("N0") Mbps)</span>
         }
     </div>
     <svg class="tm-chart" viewBox="0 0 @W @H" role="img" aria-label="Throughput over time">

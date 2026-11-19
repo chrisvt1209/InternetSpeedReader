@@ -6,128 +6,151 @@
 
 <PageTitle>Sessions - Throughput Monitor</PageTitle>
 
-<h1 class="h3 mb-3">Sessions</h1>
+<h1 class="page-title">SESSIONS</h1>
 
 @if (!Queries.DatabaseExists)
 {
-    <div class="tm-card tm-empty">
-        <p class="mb-1"><strong>No database found yet.</strong></p>
-        <p class="mb-0">Expected at <code>@Options.Value.ResolvedDatabasePath</code>. Start the agent service so it creates the database, or set <code>Web:DatabasePath</code>.</p>
-    </div>
+    <Window Title="no_database.txt">
+        <div class="tm-empty">
+            <p class="mb-1"><strong>No database found yet.</strong></p>
+            <p class="mb-0">Expected at <code>@Options.Value.ResolvedDatabasePath</code>. Start the agent service so it creates the database, or set <code>Web:DatabasePath</code>.</p>
+        </div>
+    </Window>
 }
 else
 {
-    <div class="tm-filters">
-        <div>
-            <label for="from">From</label>
-            <input id="from" type="date" class="form-control form-control-sm" @bind="_from" @bind:after="ApplyFiltersAsync" />
-        </div>
-        <div>
-            <label for="to">To</label>
-            <input id="to" type="date" class="form-control form-control-sm" @bind="_to" @bind:after="ApplyFiltersAsync" />
-        </div>
-        <div>
-            <label for="search">Label, category, note or program</label>
-            <input id="search" type="search" class="form-control form-control-sm" placeholder="e.g. steam" @bind="_search" @bind:after="ApplyFiltersAsync" />
-        </div>
-        <div class="form-check mb-1">
-            <input id="high" type="checkbox" class="form-check-input" @bind="_highPeakOnly" @bind:after="ApplyFiltersAsync" />
-            <label for="high" class="form-check-label" style="font-size:0.9rem; color:inherit">Peak ≥ @Options.Value.HighPeakMbps.ToString("N0") Mbps</label>
-        </div>
-        <div>
-            <label for="size">Rows</label>
-            <select id="size" class="form-select form-select-sm" @bind="_pageSize" @bind:after="ApplyFiltersAsync">
-                @foreach (int n in new[] { 10, 25, 50, 100 })
-                {
-                    <option value="@n">@n</option>
-                }
-            </select>
-        </div>
-        <div>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
-            <button class="btn btn-sm btn-outline-secondary" @onclick="ReloadAsync">Refresh</button>
-        </div>
-    </div>
+    <div class="stack">
 
-    <div class="tm-card">
-        @if (_result is null)
+        @if (_summary is not null)
         {
-            <div class="tm-empty">Loading…</div>
+            <div class="tiles">
+                <Window Title="peak_down.exe" Hot="true">
+                    <div class="big">@PeakText</div>
+                    <div class="cap">@Fmt.Percent(_summary.PeakRxBps * 8 / 1e6 / Options.Value.ReferenceLinkMbps) of @Options.Value.ReferenceLinkMbps.ToString("N0") Mbps link</div>
+                </Window>
+                <Window Title="today.exe">
+                    <div class="big">@Fmt.Bytes(_summary.TodayRxBytes)</div>
+                    <div class="cap">down · @Fmt.Bytes(_summary.TodayTxBytes) up</div>
+                </Window>
+                <Window Title="sessions.exe">
+                    <div class="big">@_summary.TotalSessions</div>
+                    <div class="cap">@(_summary.RunningSessions == 0 ? "none running" : _summary.RunningSessions + " running now")</div>
+                </Window>
+            </div>
         }
-        else if (_result.Total == 0)
-        {
-            <div class="tm-empty">No sessions match. A session is recorded when traffic stays above the activity threshold for a few seconds.</div>
-        }
-        else
-        {
-            <div class="tm-table-wrap">
-                <table class="tm-table">
-                    <thead>
-                        <tr>
-                            <th>@SortButton("Started", SessionSort.Start)</th>
-                            <th>Duration</th>
-                            <th>@SortButton("Label", SessionSort.Label)</th>
-                            <th class="num">@SortButton("Avg RX", SessionSort.AvgRx)</th>
-                            <th class="num">@SortButton("Peak RX", SessionSort.PeakRx)</th>
-                            <th class="num">@SortButton("Downloaded", SessionSort.TotalRx)</th>
-                            <th class="num">@SortButton("Uploaded", SessionSort.TotalTx)</th>
-                            <th>Top programs</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var r in _result.Items)
+
+        <Window Title="filter.cfg">
+            <div class="filter-row">
+                <div class="field">
+                    <label for="from">from</label>
+                    <input id="from" type="date" class="form-control form-control-sm" @bind="_from" @bind:after="ApplyFiltersAsync" />
+                </div>
+                <div class="field">
+                    <label for="to">to</label>
+                    <input id="to" type="date" class="form-control form-control-sm" @bind="_to" @bind:after="ApplyFiltersAsync" />
+                </div>
+                <div class="field" style="flex:1; min-width:200px">
+                    <label for="search" class="visually-hidden">search</label>
+                    <input id="search" type="search" class="form-control form-control-sm" style="width:100%" placeholder="search label, category, program…" @bind="_search" @bind:after="ApplyFiltersAsync" />
+                </div>
+                <div class="field">
+                    <input id="high" type="checkbox" class="form-check-input" @bind="_highPeakOnly" @bind:after="ApplyFiltersAsync" />
+                    <label for="high" class="ms-2 mb-0" style="font-size:0.82rem; color:inherit">peak ≥ @Options.Value.HighPeakMbps.ToString("N0") Mbps</label>
+                </div>
+                <div class="field">
+                    <label for="size">rows</label>
+                    <select id="size" class="form-select form-select-sm" @bind="_pageSize" @bind:after="ApplyFiltersAsync">
+                        @foreach (int n in new[] { 10, 25, 50, 100 })
                         {
-                            <tr>
-                                <td>
-                                    <a href="sessions/@r.Id">@Fmt.LocalDateTime(r.StartUtc)</a>
-                                    @if (r.IsRunning)
-                                    {
-                                        <span class="tm-badge live">running</span>
-                                    }
-                                </td>
-                                <td>@Fmt.Duration((r.EndUtc ?? DateTime.UtcNow) - r.StartUtc)</td>
-                                <td title="@r.Note">
-                                    @(r.Label ?? "-")
-                                    @if (r.Category is not null)
-                                    {
-                                        <span class="tm-badge">@r.Category</span>
-                                    }
-                                </td>
-                                <td class="num">@Fmt.Mbps(r.AvgRxBps)<span class="tm-sub">@Fmt.MBps(r.AvgRxBps)</span></td>
-                                <td class="num">
-                                    @Fmt.Mbps(r.PeakRxBps)
-                                    <span class="tm-sub">@Fmt.Percent(r.PeakRxBps * 8 / 1e6 / Options.Value.ReferenceLinkMbps) of link</span>
-                                </td>
-                                <td class="num">@Fmt.Bytes(r.TotalRxBytes)</td>
-                                <td class="num">@Fmt.Bytes(r.TotalTxBytes)</td>
-                                <td>
-                                    @if (r.TopPrograms.Count == 0)
-                                    {
-                                        <span class="tm-sub">-</span>
-                                    }
-                                    else
-                                    {
-                                        @foreach (var p in r.TopPrograms)
-                                        {
-                                            <span class="d-block">@p.Name <span class="tm-sub d-inline">@Fmt.Bytes(p.Bytes)</span></span>
-                                        }
-                                    }
-                                </td>
-                            </tr>
+                            <option value="@n">@n</option>
                         }
-                    </tbody>
-                </table>
+                    </select>
+                </div>
+                <div class="field gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ClearFiltersAsync">clear</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ReloadAsync">refresh</button>
+                </div>
             </div>
+        </Window>
 
-            <div class="tm-pager">
-                <span>@_result.Total @(_result.Total == 1 ? "session" : "sessions")</span>
-                <span>
-                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => GoToPageAsync(_page - 1)">Previous</button>
-                    <span class="mx-2">Page @_result.Page of @_result.PageCount</span>
-                    <button class="btn btn-sm btn-outline-secondary" disabled="@(_page >= _result.PageCount)" @onclick="() => GoToPageAsync(_page + 1)">Next</button>
-                </span>
-            </div>
-        }
+        <Window Title="sessions.log" BodyClass="flush">
+            <BarContent>
+                <span>@(_result?.Total ?? 0) @(_result?.Total == 1 ? "entry" : "entries")</span>
+            </BarContent>
+            <ChildContent>
+                @if (_result is null)
+                {
+                    <div class="tm-empty">Loading…</div>
+                }
+                else if (_result.Total == 0)
+                {
+                    <div class="tm-empty">No sessions match. A session is recorded when traffic stays above the activity threshold for a few seconds.</div>
+                }
+                else
+                {
+                    <div class="tm-table-wrap">
+                        <table class="tm-table">
+                            <thead>
+                                <tr>
+                                    <th>@SortButton("started", SessionSort.Start) / @SortButton("label", SessionSort.Label)</th>
+                                    <th class="num">@SortButton("avg", SessionSort.AvgRx)</th>
+                                    <th class="num">@SortButton("peak", SessionSort.PeakRx)</th>
+                                    <th class="num">@SortButton("down", SessionSort.TotalRx) / @SortButton("up", SessionSort.TotalTx)</th>
+                                    <th>top programs</th>
+                                    <th>shape</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in _result.Items)
+                                {
+                                    <tr>
+                                        <td title="@r.Note">
+                                            <a class="cell-title" href="sessions/@r.Id">@(r.Label ?? "unlabelled")</a>
+                                            @if (r.IsRunning)
+                                            {
+                                                <span class="tag">RUNNING</span>
+                                            }
+                                            <span class="cell-sub">
+                                                @Fmt.LocalDateTime(r.StartUtc) · @Fmt.Duration((r.EndUtc ?? DateTime.UtcNow) - r.StartUtc)
+                                                @if (r.Category is not null)
+                                                {
+                                                    <text> · @r.Category</text>
+                                                }
+                                            </span>
+                                        </td>
+                                        <td class="num">@Fmt.Mbps(r.AvgRxBps)<span class="cell-sub">@Fmt.MBps(r.AvgRxBps)</span></td>
+                                        <td class="num"><strong>@Fmt.Mbps(r.PeakRxBps)</strong><span class="cell-sub">@Fmt.Percent(r.PeakRxBps * 8 / 1e6 / Options.Value.ReferenceLinkMbps) of link</span></td>
+                                        <td class="num">@Fmt.Bytes(r.TotalRxBytes)<span class="cell-sub">@Fmt.Bytes(r.TotalTxBytes) up</span></td>
+                                        <td class="progs">
+                                            @if (r.TopPrograms.Count == 0)
+                                            {
+                                                <span class="mut">-</span>
+                                            }
+                                            else
+                                            {
+                                                @foreach (var p in r.TopPrograms)
+                                                {
+                                                    <span class="d-block">@p.Name <span class="mut" style="font-size:0.7rem">@Fmt.Bytes(p.Bytes)</span></span>
+                                                }
+                                            }
+                                        </td>
+                                        <td><Sparkline Values="r.Spark" /></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="tm-pager">
+                        <span class="mut">page @_result.Page of @_result.PageCount</span>
+                        <span class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@(_page <= 1)" @onclick="() => GoToPageAsync(_page - 1)">previous</button>
+                            <button class="btn btn-sm btn-outline-secondary" disabled="@(_page >= _result.PageCount)" @onclick="() => GoToPageAsync(_page + 1)">next</button>
+                        </span>
+                    </div>
+                }
+            </ChildContent>
+        </Window>
     </div>
 }
 
@@ -141,6 +164,11 @@ else
     private SessionSort _sort = SessionSort.Start;
     private bool _descending = true;
     private PagedResult<SessionRow>? _result;
+    private SessionSummary? _summary;
+
+    private string PeakText => _summary is { PeakRxBps: > 0 } s
+        ? Math.Round(s.PeakRxBps * 8 / 1e6).ToString("N0") + " MBPS"
+        : "-";
 
     protected override async Task OnInitializedAsync()
     {
@@ -150,6 +178,7 @@ else
 
     private async Task ReloadAsync()
     {
+        _summary = await Queries.GetSummaryAsync();
         _result = await Queries.QueryAsync(new SessionQuery
         {
             From = _from,

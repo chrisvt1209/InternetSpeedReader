@@ -1,0 +1,34 @@
+@* A "window": thick outline, hard shadow and a title bar. The building block of every page. *@
+<section class="win @(Hot ? "hot" : "") @Class">
+    <header class="win-bar">
+        <span class="win-title">@Title</span>
+        <span class="win-ctrl">
+            @if (BarContent is not null)
+            {
+                @BarContent
+            }
+            <span aria-hidden="true">_ x</span>
+        </span>
+    </header>
+    <div class="win-body @BodyClass">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    /// <summary>Text in the title bar, e.g. "sessions.log".</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Red title bar: marks the one window that matters most on the page.</summary>
+    [Parameter] public bool Hot { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Extra class for the body, e.g. "flush" for no padding.</summary>
+    [Parameter] public string? BodyClass { get; set; }
+
+    /// <summary>Extra controls shown in the title bar, left of the _ x.</summary>
+    [Parameter] public RenderFragment? BarContent { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

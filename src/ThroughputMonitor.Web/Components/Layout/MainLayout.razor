@@ -1,20 +1,40 @@
 ﻿@inherits LayoutComponentBase
 
-<header class="app-header">
-    <div class="app-header-inner">
-        <a class="app-brand" href="">Throughput Monitor</a>
-        <nav class="app-nav">
-            <NavLink href="" Match="NavLinkMatch.All">Sessions</NavLink>
-        </nav>
-    </div>
-</header>
+<div class="app-shell @(_navOpen ? "nav-open" : "")">
 
-<main class="app-main">
-    @Body
-</main>
+    <header class="app-topbar">
+        <button type="button" class="nav-burger" aria-label="Menu" aria-expanded="@_navOpen" @onclick="() => _navOpen = !_navOpen">menu</button>
+        <span class="brand-name">THROUGHPUT</span>
+    </header>
+
+    <aside class="app-sidebar">
+        <Window Title="menu" Class="side-window" BodyClass="side-body">
+            <a class="brand" href="" @onclick="() => _navOpen = false">THROUGH<br />PUT</a>
+
+            <nav class="side-nav" aria-label="Main">
+                <NavLink href="" Match="NavLinkMatch.Prefix" @onclick="() => _navOpen = false">Sessions</NavLink>
+            </nav>
+
+            <div class="side-footer">
+                <span class="side-footer-label">theme</span>
+                <ThemeToggle />
+            </div>
+        </Window>
+    </aside>
+
+    <div class="app-backdrop" @onclick="() => _navOpen = false"></div>
+
+    <main class="app-content">
+        @Body
+    </main>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private bool _navOpen;
+}

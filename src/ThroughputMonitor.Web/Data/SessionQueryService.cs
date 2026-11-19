@@ -29,10 +29,15 @@ public sealed record ProgramShare(string Name, long Bytes);
 public sealed record SessionRow(
     long Id, DateTime StartUtc, DateTime? EndUtc, string? Label, string? Category, string? Note,
     double AvgRxBps, double PeakRxBps, double AvgTxBps, double PeakTxBps,
-    long TotalRxBytes, long TotalTxBytes, IReadOnlyList<ProgramShare> TopPrograms)
+    long TotalRxBytes, long TotalTxBytes, IReadOnlyList<ProgramShare> TopPrograms,
+    IReadOnlyList<double>? Spark = null)
 {
     public bool IsRunning => EndUtc is null;
 }
+
+/// <summary>Numbers for the tiles on top of the sessions page.</summary>
+public sealed record SessionSummary(
+    double PeakRxBps, long TodayRxBytes, long TodayTxBytes, int TotalSessions, int RunningSessions);
 
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize)
 {
@@ -50,6 +55,7 @@ public sealed class SessionQueryService(IDbContextFactory<ThroughputDbContext> f
 {
     public const int TopProgramsPerRow = 3;
     public const int MaxRemotesShown = 50;
+    public const int SparkPoints = 28;
 
     public bool DatabaseExists => File.Exists(options.Value.ResolvedDatabasePath);
 
@@ -120,12 +126,40 @@ public sealed class SessionQueryService(IDbContextFactory<ThroughputDbContext> f
                     .Select(p => new ProgramShare(p.ProcessName, p.RxBytes + p.TxBytes))
                     .OrderByDescending(p => p.Bytes).Take(TopProgramsPerRow).ToList());
 
+        // One query for the sparklines of every row on the page (download speed over time).
+        var sparkSamples = await ctx.Samples.AsNoTracking()
+            .Where(x => x.SessionId != null && ids.Contains(x.SessionId.Value))
+            .OrderBy(x => x.SessionId).ThenBy(x => x.TimestampUtc)
+            .Select(x => new { SessionId = x.SessionId!.Value, x.RxBytesPerSec })
+            .ToListAsync(ct);
+        var sparkBySession = sparkSamples
+            .GroupBy(x => x.SessionId)
+            .ToDictionary(
+                g => g.Key,
+                g => ChartData.DownsampleMax(g.Select(x => x.RxBytesPerSec).ToList(), SparkPoints));
+
         var rows = sessions.Select(s => new SessionRow(
             s.Id, Utc(s.StartUtc), s.EndUtc is null ? null : Utc(s.EndUtc.Value), s.Label, s.Category, s.Note,
             s.AvgRxBps, s.PeakRxBps, s.AvgTxBps, s.PeakTxBps, s.TotalRxBytes, s.TotalTxBytes,
-            programsBySession.GetValueOrDefault(s.Id) ?? [])).ToList();
+            programsBySession.GetValueOrDefault(s.Id) ?? [],
+            sparkBySession.GetValueOrDefault(s.Id))).ToList();
 
         return new PagedResult<SessionRow>(rows, total, page, pageSize);
+    }
+
+    /// <summary>Highest peak ever, today's traffic (local calendar day) and session counts.</summary>
+    public async Task<SessionSummary> GetSummaryAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await factory.CreateDbContextAsync(ct);
+
+        DateTime todayUtc = ToUtcStartOfDay(DateTime.Now);
+        double peak = await ctx.Sessions.MaxAsync(s => (double?)s.PeakRxBps, ct) ?? 0;
+        long todayRx = await ctx.Sessions.Where(s => s.StartUtc >= todayUtc).SumAsync(s => (long?)s.TotalRxBytes, ct) ?? 0;
+        long todayTx = await ctx.Sessions.Where(s => s.StartUtc >= todayUtc).SumAsync(s => (long?)s.TotalTxBytes, ct) ?? 0;
+        int total = await ctx.Sessions.CountAsync(ct);
+        int running = await ctx.Sessions.CountAsync(s => s.EndUtc == null, ct);
+
+        return new SessionSummary(peak, todayRx, todayTx, total, running);
     }
 
     public async Task<SessionDetail?> GetDetailAsync(long id, int maxChartPoints = 600, CancellationToken ct = default)

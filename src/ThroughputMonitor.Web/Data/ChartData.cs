@@ -29,6 +29,23 @@ public static class ChartData
         return result;
     }
 
+    /// <summary>Same idea for a plain series of values: at most <paramref name="maxPoints"/>, each bucket keeps its highest value.</summary>
+    public static IReadOnlyList<double> DownsampleMax(IReadOnlyList<double> values, int maxPoints)
+    {
+        if (maxPoints < 2 || values.Count <= maxPoints) return values;
+
+        int bucketSize = (int)Math.Ceiling(values.Count / (double)maxPoints);
+        var result = new List<double>(maxPoints + 1);
+        for (int start = 0; start < values.Count; start += bucketSize)
+        {
+            double max = 0;
+            for (int i = start; i < Math.Min(start + bucketSize, values.Count); i++)
+                max = Math.Max(max, values[i]);
+            result.Add(max);
+        }
+        return result;
+    }
+
     /// <summary>
     /// Picks a readable axis: a tick step of 1, 2, 2.5 or 5 times a power of ten with at most six intervals,
     /// and the smallest multiple of that step that reaches <paramref name="max"/>.

@@ -1,0 +1,31 @@
+@inject IJSRuntime JS
+
+<div class="theme-toggle" role="radiogroup" aria-label="Color theme">
+    <button type="button" role="radio" aria-checked="@(_mode == "system")" title="Follow the system setting" class="@Css("system")" @onclick='() => SetAsync("system")'>sys</button>
+    <button type="button" role="radio" aria-checked="@(_mode == "light")" title="Light theme" class="@Css("light")" @onclick='() => SetAsync("light")'>light</button>
+    <button type="button" role="radio" aria-checked="@(_mode == "dark")" title="Dark theme" class="@Css("dark")" @onclick='() => SetAsync("dark")'>dark</button>
+</div>
+
+@code {
+    private string _mode = "system";
+
+    private string Css(string mode) => _mode == mode ? "on" : "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _mode = await JS.InvokeAsync<string>("tmTheme.get");
+            StateHasChanged();
+        }
+        catch (JSException) { /* theme.js missing: keep "system" */ }
+    }
+
+    private async Task SetAsync(string mode)
+    {
+        _mode = mode;
+        try { await JS.InvokeVoidAsync("tmTheme.set", mode); }
+        catch (Exception ex) when (ex is JSException or JSDisconnectedException) { /* circuit gone: nothing to update */ }
+    }
+}
