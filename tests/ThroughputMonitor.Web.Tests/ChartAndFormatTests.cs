@@ -67,6 +67,8 @@ public class ChartAndFormatTests
     [InlineData(125_000_000, "1,000 Mbps")]          // 1000 Mbps link
     [InlineData(78_400_000, "627 Mbps")]
     [InlineData(500_000, "4.0 Mbps")]
+    [InlineData(10_000, "0.08 Mbps")]                // small rates keep two decimals instead of reading as 0
+    [InlineData(0, "0.00 Mbps")]
     public void Rates_are_shown_in_megabits(double bytesPerSec, string expected) =>
         Assert.Equal(expected, Fmt.Mbps(bytesPerSec));
 

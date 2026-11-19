@@ -12,7 +12,8 @@
             <a class="brand" href="" @onclick="() => _navOpen = false">THROUGH<br />PUT</a>
 
             <nav class="side-nav" aria-label="Main">
-                <NavLink href="" Match="NavLinkMatch.Prefix" @onclick="() => _navOpen = false">Sessions</NavLink>
+                <NavLink href="" Match="NavLinkMatch.All" class="@(OnSessionDetail ? "active" : null)" @onclick="() => _navOpen = false">Sessions</NavLink>
+                <NavLink href="live" @onclick="() => _navOpen = false">Live</NavLink>
             </nav>
 
             <div class="side-footer">
@@ -36,5 +37,10 @@
 </div>
 
 @code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
     private bool _navOpen;
+
+    // "Sessions" also stays highlighted on a session's own page.
+    private bool OnSessionDetail => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("sessions/", StringComparison.OrdinalIgnoreCase);
 }

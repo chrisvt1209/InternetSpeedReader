@@ -4,17 +4,20 @@ using System.Text.Json;
 
 namespace ThroughputMonitor.Core.Ipc;
 
-/// <summary>One command sent from the speedlog CLI to the running agent.</summary>
-/// <param name="Cmd">"mark" or "status".</param>
+/// <summary>One command sent to the running agent (by the speedlog CLI or the web app).</summary>
+/// <param name="Cmd">"mark", "status" or "live".</param>
 public sealed record AgentRequest(string Cmd, string? Label = null, string? Category = null, string? Note = null);
 
-public sealed record AgentResponse(bool Ok, string Message);
+/// <param name="Message">Text for people.</param>
+/// <param name="Data">Optional JSON for programs (the "live" command returns a <see cref="LiveSnapshot"/> here).</param>
+public sealed record AgentResponse(bool Ok, string Message, string? Data = null);
 
 /// <summary>Shared contract of the local command channel (a named pipe, one JSON line each way).</summary>
 public static class AgentIpc
 {
     public const string DefaultPipeName = "ThroughputMonitorAgent";
-    public const int MaxMessageChars = 8192;
+    public const int MaxMessageChars = 8192;           // requests: small by design
+    public const int MaxResponseChars = 262_144;       // responses may carry data, e.g. the live snapshot
     public const int MaxLabelChars = 200;
     public const int MaxCategoryChars = 50;
     public const int MaxNoteChars = 1000;
@@ -50,7 +53,7 @@ public static class AgentIpc
         using var reader = new StreamReader(client, utf8, false, 1024, leaveOpen: true);
 
         await writer.WriteLineAsync(JsonSerializer.Serialize(request, Json).AsMemory(), cts.Token);
-        string? line = await ReadLineLimitedAsync(reader, MaxMessageChars, cts.Token);
+        string? line = await ReadLineLimitedAsync(reader, MaxResponseChars, cts.Token);
         return line is null
             ? new AgentResponse(false, "The agent closed the connection without an answer.")
             : JsonSerializer.Deserialize<AgentResponse>(line, Json) ?? new AgentResponse(false, "Unreadable answer from the agent.");

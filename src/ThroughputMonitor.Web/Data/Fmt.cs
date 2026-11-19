@@ -7,11 +7,12 @@ public static class Fmt
 {
     private static CultureInfo C => CultureInfo.CurrentCulture;
 
-    /// <summary>Megabits per second, e.g. "627 Mbps" or "4.2 Mbps".</summary>
+    /// <summary>Megabits per second, e.g. "627 Mbps", "4.2 Mbps" or "0.08 Mbps" (small rates keep two decimals so they don't read as 0).</summary>
     public static string Mbps(double bytesPerSec)
     {
         double mbps = bytesPerSec * 8 / 1e6;
-        return (mbps >= 100 ? mbps.ToString("N0", C) : mbps.ToString("N1", C)) + " Mbps";
+        string format = mbps >= 100 ? "N0" : mbps >= 1 ? "N1" : "N2";
+        return mbps.ToString(format, C) + " Mbps";
     }
 
     /// <summary>Megabytes per second, e.g. "78.4 MB/s".</summary>

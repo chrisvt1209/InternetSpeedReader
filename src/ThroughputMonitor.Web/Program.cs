@@ -21,6 +21,7 @@ var options = section.Get<WebOptions>() ?? new WebOptions();
 builder.Services.AddDbContextFactory<ThroughputDbContext>(o =>
     o.UseSqlite($"Data Source={options.ResolvedDatabasePath};Mode=ReadOnly"));
 builder.Services.AddScoped<SessionQueryService>();
+builder.Services.AddSingleton<LiveService>();
 
 var app = builder.Build();
 

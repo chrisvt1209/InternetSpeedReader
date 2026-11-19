@@ -18,6 +18,9 @@ public class WebOptions
 
     public int DefaultPageSize { get; set; } = 25;
 
+    /// <summary>Named pipe of the agent, for the live page. Empty = the default name (change it only together with Agent:PipeName).</summary>
+    public string? PipeName { get; set; }
+
     public string ResolvedDatabasePath =>
         string.IsNullOrWhiteSpace(DatabasePath) ? ThroughputDbContext.DefaultDatabasePath() : Path.GetFullPath(DatabasePath);
 }

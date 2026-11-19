@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using ThroughputMonitor.Agent.Commands;
+using ThroughputMonitor.Agent.Live;
 using ThroughputMonitor.Agent.Processes;
 using ThroughputMonitor.Agent.Sampling;
 using ThroughputMonitor.Agent.Sessions;
@@ -22,6 +24,11 @@ public sealed class SamplingWorker(
     private readonly AgentOptions _opt = options.Value;
     private readonly SessionMarker _marker = new(TimeSpan.FromMinutes(options.Value.PendingMarkMinutes));
     private double _lastRx, _lastTx;
+
+    // Last five minutes in memory for the web app's live page (speedlog/web "live" command).
+    private readonly LiveBuffer _live = new(300);
+    private ProcessTrafficSnapshot _lastTraffic = ProcessTrafficSnapshot.Empty;
+    private double _lastTrafficSeconds = 1;
 
     private readonly List<BufferedSample> _buffer = [];
     private readonly List<BufferedProcessSample> _processBuffer = [];
@@ -90,6 +97,10 @@ public sealed class SamplingWorker(
                     CpuPercent = sysLoad.CpuPercent,
                     DiskBytesPerSec = sysLoad.DiskBytesPerSec,
                 };
+
+                _live.Add(new LivePoint(sample.TimestampUtc, Math.Round(rx), Math.Round(tx)));
+                _lastTraffic = traffic;
+                _lastTrafficSeconds = elapsed;
 
                 if (log.IsEnabled(LogLevel.Debug))
                 {
@@ -195,6 +206,11 @@ public sealed class SamplingWorker(
                     break;
                 case "status":
                     response = new AgentResponse(true, Status(nowUtc));
+                    break;
+                case "live":   // polled by the web app about once a second, so it is not logged
+                    var snapshot = LiveSnapshotBuilder.Build(
+                        nowUtc, _live, _detector?.Current, _lastTraffic, _lastTrafficSeconds, processes.IsActive);
+                    response = new AgentResponse(true, "live", JsonSerializer.Serialize(snapshot, AgentIpc.Json));
                     break;
                 default:
                     response = new AgentResponse(false, $"Unknown command '{command.Request.Cmd}'.");

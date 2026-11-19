@@ -1,0 +1,210 @@
+@page "/live"
+@implements IDisposable
+@using Microsoft.Extensions.Options
+@using ThroughputMonitor.Core.Ipc
+@using ThroughputMonitor.Web.Data
+@inject LiveService LiveData
+@inject IOptions<WebOptions> Options
+
+<PageTitle>Live - Throughput Monitor</PageTitle>
+
+<h1 class="page-title">
+    LIVE
+    @if (_snapshot is not null && _error is null)
+    {
+        <span class="tag" style="font-family:var(--tm-mono)">@(_paused ? "PAUSED" : "UPDATING")</span>
+    }
+</h1>
+
+@if (_snapshot is null)
+{
+    @if (_error is not null)
+    {
+        <Window Title="agent_offline.txt">
+            <div class="tm-empty">
+                <p class="mb-2"><strong>No live data.</strong></p>
+                <p class="mb-0">@_error</p>
+            </div>
+        </Window>
+    }
+    else
+    {
+        <div class="tm-empty">Connecting to the agent…</div>
+    }
+}
+else
+{
+    var s = _snapshot;
+    double refMbps = Options.Value.ReferenceLinkMbps;
+    // Shares are among the programs listed (they add up to 100%); the adapter total can be lower or higher by timing and overhead.
+    double listedTotal = s.Programs.Sum(p => p.RxBps + p.TxBps);
+
+    <div class="stack">
+
+        @if (_error is not null)
+        {
+            <Window Title="agent_offline.txt" Hot="true">
+                <span>@_error Showing the last data received at @Fmt.LocalTime(s.NowUtc).</span>
+            </Window>
+        }
+
+        <div class="tiles">
+            <Window Title="download.exe" Hot="true">
+                <div class="big">@Fmt.Mbps(s.RxBps)</div>
+                <div class="cap">@Fmt.MBps(s.RxBps) · @Fmt.Percent(s.RxBps * 8 / 1e6 / refMbps) of link</div>
+            </Window>
+            <Window Title="upload.exe">
+                <div class="big">@Fmt.Mbps(s.TxBps)</div>
+                <div class="cap">@Fmt.MBps(s.TxBps)</div>
+            </Window>
+            <Window Title="session.exe">
+                @if (s.Session is { } session)
+                {
+                    <div class="big">@Fmt.Duration(s.NowUtc - session.StartUtc)</div>
+                    <div class="cap">
+                        @if (session.Id > 0)
+                        {
+                            <a href="sessions/@session.Id">@(session.Label ?? "running session")</a>
+                        }
+                        else
+                        {
+                            <span>@(session.Label ?? "running session")</span>
+                        }
+                        · @Fmt.Bytes(session.TotalRxBytes) down so far
+                    </div>
+                }
+                else
+                {
+                    <div class="big">IDLE</div>
+                    <div class="cap">no session running · starts above the activity threshold</div>
+                }
+            </Window>
+        </div>
+
+        <Window Title="live.chart">
+            <BarContent>
+                <button class="tm-sort @(_rangeSeconds == 60 ? "active" : "")" @onclick="() => SetRange(60)">1 min</button>
+                <button class="tm-sort @(_rangeSeconds == 300 ? "active" : "")" @onclick="() => SetRange(300)">5 min</button>
+                <label><input type="checkbox" @bind="_scaleToLink" />scale to link</label>
+                <label><input type="checkbox" @bind="_paused" />pause</label>
+            </BarContent>
+            <ChildContent>
+                <ThroughputChart Points="ChartPoints" ReferenceMbps="refMbps" ScaleToReference="_scaleToLink" />
+                <div class="cap">Updated @Fmt.LocalTime(s.NowUtc) · one point per second, straight from the agent</div>
+            </ChildContent>
+        </Window>
+
+        <Window Title="programs.now" BodyClass="flush">
+            @if (!s.ProcessTracking)
+            {
+                <div class="tm-empty">Per-program traffic needs the agent to run as administrator (the Windows Service does).</div>
+            }
+            else if (s.Programs.Count == 0)
+            {
+                <div class="tm-empty">No program is using the network right now.</div>
+            }
+            else
+            {
+                <div class="tm-table-wrap">
+                    <table class="tm-table">
+                        <thead>
+                            <tr>
+                                <th>program</th>
+                                <th class="num">down</th>
+                                <th class="num">up</th>
+                                <th>share of listed traffic</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in s.Programs)
+                            {
+                                double share = listedTotal <= 0 ? 0 : (p.RxBps + p.TxBps) / listedTotal;
+                                <tr>
+                                    <td><strong>@p.Name</strong></td>
+                                    <td class="num">@Fmt.Mbps(p.RxBps)</td>
+                                    <td class="num">@Fmt.Mbps(p.TxBps)</td>
+                                    <td>
+                                        <div class="share">
+                                            <div class="share-bar"><span style="width:@((share * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                            <span class="share-pct">@Fmt.Percent(share)</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </Window>
+    </div>
+}
+
+@code {
+    private const int MaxChartPoints = 150;
+
+    private readonly CancellationTokenSource _cts = new();
+    private LiveSnapshot? _snapshot;
+    private string? _error;
+    private bool _paused;
+    private bool _scaleToLink;
+    private int _rangeSeconds = 60;
+    private IReadOnlyList<ChartPoint> _chartPoints = [];
+
+    private IReadOnlyList<ChartPoint> ChartPoints => _chartPoints;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Not in OnInitialized: that also runs during prerendering, where no loop must start.
+        if (firstRender) _ = PollAsync(_cts.Token);
+    }
+
+    private async Task PollAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+            do
+            {
+                if (!_paused) await RefreshAsync(ct);
+            }
+            while (await timer.WaitForNextTickAsync(ct));
+        }
+        catch (OperationCanceledException) { /* page closed */ }
+        catch (ObjectDisposedException) { /* circuit gone */ }
+    }
+
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        var result = await LiveData.GetAsync(ct);
+        _error = result.Error;
+        if (result.Snapshot is not null)
+        {
+            _snapshot = result.Snapshot;
+            _chartPoints = BuildChartPoints(result.Snapshot, _rangeSeconds);
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SetRange(int seconds)
+    {
+        _rangeSeconds = seconds;
+        if (_snapshot is not null) _chartPoints = BuildChartPoints(_snapshot, seconds);
+    }
+
+    /// <summary>The last <paramref name="rangeSeconds"/> of the snapshot, thinned for drawing.</summary>
+    private static IReadOnlyList<ChartPoint> BuildChartPoints(LiveSnapshot snapshot, int rangeSeconds)
+    {
+        var from = snapshot.NowUtc.AddSeconds(-rangeSeconds - 1);
+        var points = snapshot.Points
+            .Where(p => p.T >= from)
+            .Select(p => new ChartPoint(DateTime.SpecifyKind(p.T, DateTimeKind.Utc), p.Rx, p.Tx))
+            .ToList();
+        return ChartData.Downsample(points, MaxChartPoints);
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

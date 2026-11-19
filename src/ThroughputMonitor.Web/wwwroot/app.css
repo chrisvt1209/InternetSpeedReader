@@ -65,6 +65,9 @@ code { color: var(--tm-red); background: transparent; }
 
 .win-ctrl { display: flex; align-items: center; gap: 0.9rem; white-space: nowrap; font-weight: 400; }
 .win-ctrl label { margin: 0; cursor: pointer; }
+.win-ctrl .tm-sort { color: var(--tm-paper); font-size: inherit; opacity: 0.7; }
+.win-ctrl .tm-sort:hover, .win-ctrl .tm-sort.active { color: var(--tm-paper); opacity: 1; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.win.hot .win-ctrl .tm-sort { color: #fff; }
 .win-ctrl input { accent-color: var(--tm-paper); vertical-align: -2px; margin-right: 0.3rem; }
 
 .win-body { padding: 0.75rem 0.9rem; }

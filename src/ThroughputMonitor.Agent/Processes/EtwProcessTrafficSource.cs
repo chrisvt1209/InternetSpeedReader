@@ -1,4 +1,3 @@
-using System.Net;
 using System.Runtime.Versioning;
 using Microsoft.Diagnostics.Tracing.Session;
 
@@ -60,8 +59,10 @@ public sealed class EtwProcessTrafficSource(
         long bytes = Convert.ToInt64(sizeObj);
         int pid = e.PayloadByName("PID") is { } p ? Convert.ToInt32(p) : e.ProcessID;
 
-        string remote = FormatAddress(e.PayloadByName("daddr"));
-        if (remote is "127.0.0.1" or "::1") return;   // loopback never touches the NIC
+        object? rawAddress = e.PayloadByName("daddr");
+        var address = EtwAddress.Parse(rawAddress);
+        if (address is not null && EtwAddress.IsLoopback(address)) return;   // loopback never touches the NIC
+        string remote = address?.ToString() ?? rawAddress?.ToString() ?? "?";
 
         resolver.Resolve(pid);   // resolve on first sight, while a short-lived process may still exist
 
@@ -72,15 +73,6 @@ public sealed class EtwProcessTrafficSource(
             slot[send ? 1 : 0] += bytes;
         }
     }
-
-    private static string FormatAddress(object? raw) => raw switch
-    {
-        null => "?",
-        IPAddress ip => ip.ToString(),
-        uint u => new IPAddress(u).ToString(),
-        int i => new IPAddress((uint)i).ToString(),
-        _ => raw.ToString() ?? "?",
-    };
 
     public ProcessTrafficSnapshot Drain()
     {
