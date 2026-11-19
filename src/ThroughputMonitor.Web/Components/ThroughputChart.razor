@@ -1,0 +1,119 @@
+@using ThroughputMonitor.Web.Data
+
+@* Inline SVG line chart of RX / TX throughput (no JavaScript). Hover a column for the exact values. *@
+
+@if (Points.Count < 2)
+{
+    <div class="tm-empty">Not enough samples to draw a chart.</div>
+}
+else
+{
+    <div class="tm-legend">
+        <span><i class="rx"></i>Download (RX)</span>
+        <span><i class="tx"></i>Upload (TX)</span>
+        @if (_showRef)
+        {
+            <span><i style="background:var(--tm-ref)"></i>Link capacity (@ReferenceMbps.ToString("N0") Mbps)</span>
+        }
+    </div>
+    <svg class="tm-chart" viewBox="0 0 @W @H" role="img" aria-label="Throughput over time">
+        @foreach (var (_, y) in _yTicks)
+        {
+            <line class="grid" x1="@Left" x2="@(W - Right)" y1="@F(y)" y2="@F(y)" />
+        }
+        @((MarkupString)_labelsSvg)
+
+        @if (_showRef)
+        {
+            <line class="ref" x1="@Left" x2="@(W - Right)" y1="@F(_refY)" y2="@F(_refY)" />
+        }
+
+        <polyline class="line tx" points="@_txPath" />
+        <polyline class="line rx" points="@_rxPath" />
+        <line class="axis" x1="@Left" x2="@(W - Right)" y1="@(H - Bottom)" y2="@(H - Bottom)" />
+
+        @foreach (var h in _hits)
+        {
+            <rect class="hit" x="@F(h.X)" y="@Top" width="@F(h.Width)" height="@(H - Top - Bottom)">
+                <title>@h.Tooltip</title>
+            </rect>
+        }
+    </svg>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChartPoint> Points { get; set; } = [];
+
+    /// <summary>Capacity of the connection in Mbps; drawn as a dashed line.</summary>
+    [Parameter] public double ReferenceMbps { get; set; } = 1000;
+
+    /// <summary>When true the vertical axis always reaches the reference line; otherwise it fits the data.</summary>
+    [Parameter] public bool ScaleToReference { get; set; }
+
+    private const double W = 900, H = 320, Left = 52, Right = 14, Top = 16, Bottom = 28;
+
+    private sealed record Hit(double X, double Width, string Tooltip);
+
+    private List<(double Value, double Y)> _yTicks = [];
+    private List<(string Label, double X)> _xTicks = [];
+    private List<Hit> _hits = [];
+    private string _rxPath = "", _txPath = "";
+    private string _labelsSvg = "";   // axis labels; Razor reserves the <text> tag, so they are built as markup
+    private double _refY;
+    private bool _showRef;
+
+    protected override void OnParametersSet()
+    {
+        if (Points.Count < 2) return;
+
+        double dataMax = Points.Max(p => Math.Max(p.RxBps, p.TxBps)) * 8 / 1e6;
+        var (step, yMax) = ChartData.NiceAxis(ScaleToReference ? Math.Max(dataMax, ReferenceMbps) : Math.Max(dataMax * 1.03, 1));
+
+        double plotW = W - Left - Right, plotH = H - Top - Bottom;
+        DateTime t0 = Points[0].TimeUtc, t1 = Points[^1].TimeUtc;
+        double span = Math.Max((t1 - t0).TotalSeconds, 1);
+
+        double X(DateTime t) => Left + (t - t0).TotalSeconds / span * plotW;
+        double Y(double mbps) => Top + plotH - mbps / yMax * plotH;
+
+        _rxPath = string.Join(' ', Points.Select(p => $"{F(X(p.TimeUtc))},{F(Y(p.RxBps * 8 / 1e6))}"));
+        _txPath = string.Join(' ', Points.Select(p => $"{F(X(p.TimeUtc))},{F(Y(p.TxBps * 8 / 1e6))}"));
+
+        int intervals = (int)Math.Round(yMax / step);
+        _yTicks = Enumerable.Range(0, intervals + 1).Select(i => step * i).Select(v => (v, Y(v))).ToList();
+        string tickFormat = step < 1 ? "0.##" : "N0";
+
+        string fmt = span >= 3 * 3600 ? "t" : "T";
+        _xTicks = Enumerable.Range(0, 5).Select(i =>
+        {
+            var t = t0.AddSeconds(span * i / 4);
+            return (Fmt.Local(t).ToString(fmt, System.Globalization.CultureInfo.CurrentCulture), X(t));
+        }).ToList();
+
+        var labels = new System.Text.StringBuilder();
+        labels.Append($"<text x=\"{F(Left)}\" y=\"10\" text-anchor=\"start\">Mbps</text>");
+        foreach (var (value, y) in _yTicks)
+            labels.Append($"<text x=\"{F(Left - 6)}\" y=\"{F(y + 4)}\" text-anchor=\"end\">{System.Net.WebUtility.HtmlEncode(value.ToString(tickFormat))}</text>");
+        for (int i = 0; i < _xTicks.Count; i++)   // first label starts at the axis, last ends at it, so none is clipped
+        {
+            string anchor = i == 0 ? "start" : i == _xTicks.Count - 1 ? "end" : "middle";
+            labels.Append($"<text x=\"{F(_xTicks[i].X)}\" y=\"{F(H - 8)}\" text-anchor=\"{anchor}\">{System.Net.WebUtility.HtmlEncode(_xTicks[i].Label)}</text>");
+        }
+        _labelsSvg = labels.ToString();
+
+        _showRef = ReferenceMbps > 0 && ReferenceMbps <= yMax;
+        _refY = Y(ReferenceMbps);
+
+        _hits = new List<Hit>(Points.Count);
+        for (int i = 0; i < Points.Count; i++)
+        {
+            double xl = i == 0 ? Left : (X(Points[i - 1].TimeUtc) + X(Points[i].TimeUtc)) / 2;
+            double xr = i == Points.Count - 1 ? W - Right : (X(Points[i].TimeUtc) + X(Points[i + 1].TimeUtc)) / 2;
+            var p = Points[i];
+            _hits.Add(new Hit(xl, Math.Max(xr - xl, 0.5),
+                $"{Fmt.LocalTime(p.TimeUtc)}   RX {Fmt.Mbps(p.RxBps)} ({Fmt.MBps(p.RxBps)})   TX {Fmt.Mbps(p.TxBps)}"));
+        }
+    }
+
+    private static string F(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+}

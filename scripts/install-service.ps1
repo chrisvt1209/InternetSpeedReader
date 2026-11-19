@@ -20,7 +20,10 @@ param(
     [string]$InstallDir = (Join-Path $env:ProgramFiles 'ThroughputMonitor\Agent'),
     [switch]$NoStart,
     # Also add the speedlog folder to the machine-wide PATH, so `speedlog` works in every new terminal.
-    [switch]$AddToPath
+    [switch]$AddToPath,
+    # The web app runs as this user and needs to read the database the service writes (SQLite also
+    # needs write access to the folder for its -shm file). Pass '' to skip changing permissions.
+    [string]$DataAccessUser = "$env:USERDOMAIN\$env:USERNAME"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,6 +83,15 @@ if (-not $existing) {
 & sc.exe config $serviceName start= delayed-auto | Out-Null
 & sc.exe failure $serviceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
 & sc.exe failureflag $serviceName 1 | Out-Null   # also restart when the process exits with an error code
+
+# 3b. Data folder: created here (not by the service) so the web app's user may read the database.
+$dataDir = Join-Path $env:ProgramData 'ThroughputMonitor'
+New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+if ($DataAccessUser) {
+    Write-Host "Granting $DataAccessUser modify access to $dataDir (for the web app) ..."
+    & icacls.exe $dataDir /grant "${DataAccessUser}:(OI)(CI)M" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Could not change permissions on $dataDir (icacls exit code $LASTEXITCODE)." }
+}
 
 # 4. Start.
 if ($NoStart) {

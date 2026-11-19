@@ -1,0 +1,19 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/ThroughputMonitor.Agent/ThroughputMonitor.Agent.csproj" />
+    <Project Path="src/ThroughputMonitor.Cli/ThroughputMonitor.Cli.csproj" />
+    <Project Path="src/ThroughputMonitor.Core/ThroughputMonitor.Core.csproj" />
+    <Project Path="src/ThroughputMonitor.EtwSpike/ThroughputMonitor.EtwSpike.csproj" />
+    <Project Path="src/ThroughputMonitor.SamplerSpike/ThroughputMonitor.SamplerSpike.csproj" />
+    <Project Path="src/ThroughputMonitor.Web/ThroughputMonitor.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ThroughputMonitor.Agent.Tests/ThroughputMonitor.Agent.Tests.csproj" />
+    <Project Path="tests/ThroughputMonitor.Web.Tests/ThroughputMonitor.Web.Tests.csproj" />
+  </Folder>
+</Solution>

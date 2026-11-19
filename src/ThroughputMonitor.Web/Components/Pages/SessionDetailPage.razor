@@ -1,0 +1,190 @@
+@page "/sessions/{Id:long}"
+@using Microsoft.Extensions.Options
+@using ThroughputMonitor.Web.Data
+@inject SessionQueryService Queries
+@inject IOptions<WebOptions> Options
+
+<PageTitle>Session @Id - Throughput Monitor</PageTitle>
+
+<p><a href="">← All sessions</a></p>
+
+@if (_loading)
+{
+    <div class="tm-empty">Loading…</div>
+}
+else if (_detail is null)
+{
+    <div class="tm-card tm-empty">Session @Id was not found.</div>
+}
+else
+{
+    var s = _detail.Session;
+    bool running = s.EndUtc is null;
+    var end = s.EndUtc ?? DateTime.UtcNow;
+    double refMbps = Options.Value.ReferenceLinkMbps;
+    long programBytes = _detail.Programs.Sum(p => p.RxBytes + p.TxBytes);
+
+    <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
+        <h1 class="h3 mb-0">@(s.Label ?? "Session " + s.Id)</h1>
+        @if (s.Category is not null)
+        {
+            <span class="tm-badge">@s.Category</span>
+        }
+        @if (running)
+        {
+            <span class="tm-badge live">running</span>
+        }
+        <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="LoadAsync">Refresh</button>
+    </div>
+    <p class="tm-muted">
+        @Fmt.LocalDateTime(s.StartUtc) – @(running ? "now" : Fmt.LocalDateTime(s.EndUtc!.Value))
+        (@Fmt.Duration(end - s.StartUtc))
+    </p>
+    @if (!string.IsNullOrWhiteSpace(s.Note))
+    {
+        <p class="tm-card py-2">@s.Note</p>
+    }
+
+    <div class="tm-stats">
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Average download</div>
+            <div class="tm-stat-value">@Fmt.Mbps(s.AvgRxBps)</div>
+            <span class="tm-sub">@Fmt.MBps(s.AvgRxBps)</span>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Peak download</div>
+            <div class="tm-stat-value">@Fmt.Mbps(s.PeakRxBps)</div>
+            <span class="tm-sub">@Fmt.MBps(s.PeakRxBps) · @Fmt.Percent(s.PeakRxBps * 8 / 1e6 / refMbps) of @refMbps.ToString("N0") Mbps</span>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Downloaded</div>
+            <div class="tm-stat-value">@Fmt.Bytes(s.TotalRxBytes)</div>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Average / peak upload</div>
+            <div class="tm-stat-value">@Fmt.Mbps(s.AvgTxBps)</div>
+            <span class="tm-sub">peak @Fmt.Mbps(s.PeakTxBps) · @Fmt.Bytes(s.TotalTxBytes) sent</span>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">CPU (avg / peak)</div>
+            <div class="tm-stat-value">@s.AvgCpuPercent.ToString("N0")% / @s.PeakCpuPercent.ToString("N0")%</div>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Disk (avg / peak)</div>
+            <div class="tm-stat-value">@Fmt.MBps(s.AvgDiskBytesPerSec)</div>
+            <span class="tm-sub">peak @Fmt.MBps(s.PeakDiskBytesPerSec)</span>
+        </div>
+        <div class="tm-card tm-stat">
+            <div class="tm-stat-label">Lowest link speed</div>
+            <div class="tm-stat-value">@Fmt.LinkSpeed(s.MinLinkSpeedBps)</div>
+        </div>
+    </div>
+
+    <div class="tm-card mb-3">
+        <div class="d-flex align-items-center mb-2">
+            <h2 class="h5 mb-0">Throughput</h2>
+            <div class="form-check ms-auto mb-0">
+                <input id="scale" type="checkbox" class="form-check-input" @bind="_scaleToLink" />
+                <label for="scale" class="form-check-label" style="font-size:0.85rem">Scale to link capacity</label>
+            </div>
+        </div>
+        <ThroughputChart Points="_detail.Points" ReferenceMbps="refMbps" ScaleToReference="_scaleToLink" />
+    </div>
+
+    <div class="tm-card mb-3">
+        <h2 class="h5">Programs</h2>
+        @if (_detail.Programs.Count == 0)
+        {
+            <div class="tm-empty">
+                @(running
+                    ? "Per-program totals are saved when the session ends."
+                    : "No per-program data for this session (the agent was probably not running as administrator).")
+            </div>
+        }
+        else
+        {
+            <div class="tm-table-wrap">
+                <table class="tm-table">
+                    <thead>
+                        <tr>
+                            <th>Program</th>
+                            <th class="num">Downloaded</th>
+                            <th class="num">Uploaded</th>
+                            <th class="num">Peak RX</th>
+                            <th>Share of traffic</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in _detail.Programs)
+                        {
+                            double share = programBytes == 0 ? 0 : (double)(p.RxBytes + p.TxBytes) / programBytes;
+                            <tr>
+                                <td title="@p.ExePath">@p.ProcessName</td>
+                                <td class="num">@Fmt.Bytes(p.RxBytes)</td>
+                                <td class="num">@Fmt.Bytes(p.TxBytes)</td>
+                                <td class="num">@Fmt.Mbps(p.PeakRxBps)</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="tm-bar flex-grow-1"><span style="width:@((share * 100).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></span></div>
+                                        <span class="tm-sub d-inline" style="min-width:3rem">@Fmt.Percent(share)</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    <div class="tm-card">
+        <h2 class="h5">Remote servers</h2>
+        @if (_detail.Remotes.Count == 0)
+        {
+            <div class="tm-empty">No remote address data for this session.</div>
+        }
+        else
+        {
+            <div class="tm-table-wrap">
+                <table class="tm-table">
+                    <thead>
+                        <tr>
+                            <th>Program</th>
+                            <th>Remote address</th>
+                            <th class="num">Downloaded</th>
+                            <th class="num">Uploaded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _detail.Remotes)
+                        {
+                            <tr>
+                                <td>@r.ProcessName</td>
+                                <td>@(r.RemoteHostName ?? r.RemoteIp)@if (r.RemoteHostName is not null) { <span class="tm-sub">@r.RemoteIp</span> }</td>
+                                <td class="num">@Fmt.Bytes(r.RxBytes)</td>
+                                <td class="num">@Fmt.Bytes(r.TxBytes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public long Id { get; set; }
+
+    private SessionDetail? _detail;
+    private bool _loading = true;
+    private bool _scaleToLink;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = _detail is null;
+        _detail = Queries.DatabaseExists ? await Queries.GetDetailAsync(Id) : null;
+        _loading = false;
+    }
+}
