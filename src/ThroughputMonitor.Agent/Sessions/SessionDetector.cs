@@ -20,7 +20,8 @@ public enum SampleState
 
 public enum SessionEvent { None, Started, Ended }
 
-public readonly record struct DetectorResult(SampleState State, SessionEvent Event, Session? Session);
+/// <param name="Active">Whether this sample itself was at or above the activity threshold.</param>
+public readonly record struct DetectorResult(SampleState State, SessionEvent Event, Session? Session, bool Active = false);
 
 /// <summary>
 /// State machine that turns a stream of 1 s samples into sessions.
@@ -60,7 +61,7 @@ public sealed class SessionDetector(DetectorOptions options, int adapterId)
             _pending.Add(s);
             _pendingSeconds += seconds;
             if (_pendingSeconds < options.StartAfterSeconds)
-                return new(SampleState.Pending, SessionEvent.None, null);
+                return new(SampleState.Pending, SessionEvent.None, null, true);
 
             return Start(s);
         }
@@ -73,7 +74,7 @@ public sealed class SessionDetector(DetectorOptions options, int adapterId)
             _lastActiveUtc = s.TimestampUtc;
             _quietSeconds = 0;
             Apply();
-            return new(SampleState.InSession, SessionEvent.None, _session);
+            return new(SampleState.InSession, SessionEvent.None, _session, true);
         }
 
         _tail.Add(s, seconds);
@@ -81,9 +82,9 @@ public sealed class SessionDetector(DetectorOptions options, int adapterId)
         if (_quietSeconds >= options.EndAfterSeconds)
         {
             var ended = End();
-            return new(SampleState.InSession, SessionEvent.Ended, ended);
+            return new(SampleState.InSession, SessionEvent.Ended, ended, false);
         }
-        return new(SampleState.InSession, SessionEvent.None, _session);
+        return new(SampleState.InSession, SessionEvent.None, _session, false);
     }
 
     /// <summary>Ends the open session (e.g. on shutdown). Returns it, or null when none was open.</summary>
@@ -111,7 +112,7 @@ public sealed class SessionDetector(DetectorOptions options, int adapterId)
         _quietSeconds = 0;
         _lastActiveUtc = current.TimestampUtc;
         Apply();
-        return new(SampleState.InSession, SessionEvent.Started, _session);
+        return new(SampleState.InSession, SessionEvent.Started, _session, true);
     }
 
     private Session End()
